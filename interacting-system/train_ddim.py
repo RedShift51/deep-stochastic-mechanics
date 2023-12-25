@@ -360,6 +360,7 @@ if __name__ == "__main__":
                     with torch.inference_mode():
                         milestone = step // save_and_sample_every
                         batches = num_to_groups(num_samples, batch_size)
+                        # sample_fn = ddim_sample from unet methods
                         all_images_list = list(map(lambda n: ema.ema_model.sample(batch_size=n), batches))
 
                     all_images = torch.cat(all_images_list, dim=0)
@@ -367,7 +368,7 @@ if __name__ == "__main__":
                     utils.save_image(all_images, str(results_folder / f'sample-{milestone}.png'),
                                      nrow=int(math.sqrt(num_samples)))
 
-                    save(milestone)
+                    save(step, accelerator, ema, opt, results_folder, milestone)
 
             pbar.update(1)
 
