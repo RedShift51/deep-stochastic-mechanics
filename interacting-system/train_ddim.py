@@ -279,14 +279,6 @@ if __name__ == "__main__":
         flash_attn=False
     )
 
-    diffusion = GaussianDiffusionCustom(
-        model,
-        image_size=256,
-        timesteps=1000,           # number of steps
-        sampling_timesteps=250    # number of sampling timesteps (using ddim for faster inference [see citation for ddim paper])
-    )
-
-    # setting training parameters
     split_batches = True
     mixed_precision_type = 'fp16'
     amp = True
@@ -294,6 +286,15 @@ if __name__ == "__main__":
         split_batches=split_batches,
         mixed_precision=mixed_precision_type if amp else 'no'
     )
+
+    diffusion = GaussianDiffusionCustom(
+        model,
+        image_size=192,
+        timesteps=1000,           # number of steps
+        sampling_timesteps=250    # number of sampling timesteps (using ddim for faster inference [see citation for ddim paper])
+    )
+
+    # setting training parameters
 
     channels = 3
     convert_image_to = {1: 'L', 3: 'RGB', 4: 'RGBA'}.get(channels)
