@@ -29,8 +29,9 @@ from ema_pytorch import EMA
 from accelerate import Accelerator
 
 from attend import Attend
+"""
 from fid_evaluation import FIDEvaluation
-
+"""
 
 # constants
 

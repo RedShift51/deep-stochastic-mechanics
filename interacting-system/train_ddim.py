@@ -208,12 +208,16 @@ def p_losses(x_start, t, model, objective, noise = None):
     u = -x / 2
     """
 
+    t = t.float()
+    t.requires_grad_()
+    x.requires_grad_()
+
     # time derivative
-    du_dt = torch.zeros(x_start)
+    du_dt = torch.zeros_like(x_start)
     du_dt = du_dt.view(batch_size, diffusion.image_size * diffusion.image_size * 3)
     model_out = -model.model(x, t, x_self_cond).view(batch_size, diffusion.image_size * diffusion.image_size * 3) / 2
     grad_batch = 64
-    vector = torch.zeros_like(grad_batch, batch_size,
+    vector = torch.zeros(grad_batch, batch_size,
                               diffusion.image_size*diffusion.image_size*3).cuda()
     for i in range(diffusion.image_size * diffusion.image_size * 3 // grad_batch):
         for k in range(grad_batch):
@@ -295,7 +299,7 @@ if __name__ == "__main__":
     convert_image_to = {1: 'L', 3: 'RGB', 4: 'RGBA'}.get(channels)
     num_samples = 25
     save_and_sample_every = 2500
-    batch_size = 4
+    batch_size = 1
     gradient_accumulate_every = 4
 
     train_num_steps = 300000
