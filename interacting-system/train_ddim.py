@@ -209,16 +209,20 @@ def p_losses(x_start, t, model, objective, noise = None):
     """
 
     # time derivative
-    du_dt = torch.zeros(x_start.shape[0])
+    du_dt = torch.zeros(x_start)
     du_dt = du_dt.view(batch_size, diffusion.image_size * diffusion.image_size * 3)
     model_out = -model.model(x, t, x_self_cond).view(batch_size, diffusion.image_size * diffusion.image_size * 3) / 2
-    vector = torch.zeros_like(model_out)
-    for i in range(diffusion.image_size * diffusion.image_size * 3):
-        if i != 0:
-            vector[:, i - 1] = 1
-        vector[:, i] = 1
-        dudt = grad(model_out, t, grad_outputs=vector, create_graph=True)[0]
-        du_dt[:, i] = dudt[:, 0]
+    grad_batch = 64
+    vector = torch.zeros_like(grad_batch, batch_size,
+                              diffusion.image_size*diffusion.image_size*3).cuda()
+    for i in range(diffusion.image_size * diffusion.image_size * 3 // grad_batch):
+        for k in range(grad_batch):
+            if i != 0:
+                vector[k, :, (i-1)*grad_batch+k] = 0
+            vector[k, :, i*grad_batch+k] = 1
+        dudt = grad(model_out, t, grad_outputs=vector, retain_graph=True, is_grads_batched=True)[0]
+        du_dt[:, grad_batch*i: grad_batch*(i+1)] = torch.transpose(dudt, 0, 1)
+        print(i * grad_batch)
 
     # spatial derivatives
     dv_ddx = get_jacobian(
