@@ -37,11 +37,10 @@ def get_jacobian(y, x):
     :return: Jacobian matrix (torch.tensor) of shape [B, N, N]
     """
 
-    B, C, X1, X2 = x.shape
     jacobian = list()
-    for i in range(y.shape[0]):
+    for i in range(y.shape[-1]):
         v = torch.zeros_like(y)
-        v[i] = 1.
+        v[:, i] = 1.
         dy_i_dx = grad(y,
                        x,
                        grad_outputs=v,
@@ -50,10 +49,9 @@ def get_jacobian(y, x):
                        allow_unused=True)[0]  # shape [B, N]
         jacobian.append(dy_i_dx)
 
-    jacobian = torch.stack(jacobian, dim=0).requires_grad_()
+    jacobian = torch.stack(jacobian, dim=2).requires_grad_()
 
     return jacobian
-
 
 def num_to_groups(num, divisor):
     groups = num // divisor
@@ -189,8 +187,6 @@ def p_losses(x_start, t, model, objective, noise = None):
 
     # predict and take gradient step
 
-    model_out = model.model(x, t, x_self_cond)
-
     if objective == 'pred_noise':
         target = noise
     elif objective == 'pred_x0':
@@ -211,22 +207,36 @@ def p_losses(x_start, t, model, objective, noise = None):
 
     u = -x / 2
     """
-    out_u = model_out / 2
-    out_v = x + model_out / 2
-    out_uv = out_u * out_v
 
-    du_dt = get_jacobian(out_u.sum(keepdim=0), t)
-    dv_dx = get_jacobian(out_v.sum(keepdim=0), x)
-    dv_ddx = get_jacobian(dv_dx.sum(keepdim=0), x)
-    dvu_dx = get_jacobian(out_uv.sum(keepdim=0), x)
+    # time derivative
+    du_dt = torch.zeros(x_start.shape[0])
+    du_dt = du_dt.view(batch_size, diffusion.image_size * diffusion.image_size * 3)
+    model_out = -model.model(x, t, x_self_cond).view(batch_size, diffusion.image_size * diffusion.image_size * 3) / 2
+    vector = torch.zeros_like(model_out)
+    for i in range(diffusion.image_size * diffusion.image_size * 3):
+        if i != 0:
+            vector[:, i - 1] = 1
+        vector[:, i] = 1
+        dudt = grad(model_out, t, grad_outputs=vector, create_graph=True)[0]
+        du_dt[:, i] = dudt[:, 0]
 
-    """
-    du_dt = grad(out_u.sum(keepdim=0), t, create_graph=True)[0]
-    dv_dx = grad(out_v.sum(keepdim=0), x, create_graph=True)[0]
+    # spatial derivatives
+    dv_ddx = get_jacobian(
+        lambda x_: torch.einsum(
+            "jii",
+            get_jacobian(
+                lambda x_: (model.model(x, t, x_self_cond) / 2 - x).view(
+                            batch_size, diffusion.image_size * diffusion.image_size * 3
+                        ),
+                x_
+            ),
+        ),
+        x,
+    )
 
-    dv_ddx = grad(dv_dx.sum(keepdim=0), x, create_graph=True)[0]
-    dvu_dx = grad(out_uv.sum(keepdim=0), x, create_graph=True)[0]
-    """
+    out_uv = - model_out * (-x + model_out / 2) / 2
+    dvu_dx = grad(out_uv, x, grad_outputs=torch.ones_like(out_uv), create_graph=True)[0]
+
     h = torch.gather(model.beta_schedule, 0, t.long())
     m = 1
     L1 = model.criterion(du_dt, -(h / (2 * m)) * dv_ddx - dvu_dx) + \
